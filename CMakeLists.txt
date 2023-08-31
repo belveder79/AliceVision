@@ -30,6 +30,8 @@ option(AV_BUILD_GEOGRAPHIC "Enable building an embedded Geographic library" ON)
 option(AV_BUILD_ALICEVISION "Enable building of AliceVision" ON)
 option(AV_EIGEN_MEMORY_ALIGNMENT "Enable Eigen memory alignment" ON)
 
+option(AV_USE_GEOGRAPHIC "Use GeographicLib" ON)
+
 option(AV_USE_CUDA "Enable CUDA" ON)
 # disable by default for AppleClang
 option(AV_USE_OPENMP "Enable OpenMP" $<$<CXX_COMPILER_ID:"AppleClang">,OFF,ON>)
@@ -84,6 +86,7 @@ message(STATUS "AV_BUILD_FFMPEG: ${AV_BUILD_FFMPEG}")
 message(STATUS "AV_BUILD_VPX: ${AV_BUILD_VPX}")
 message(STATUS "AV_USE_CUDA: ${AV_USE_CUDA}")
 message(STATUS "AV_USE_OPENMP: ${AV_USE_OPENMP}")
+message(STATUS "AV_USE_GEOGRAPHIC: ${AV_USE_GEOGRAPHIC}")
 message(STATUS "AV_BUILD_COINUTILS: ${AV_BUILD_COINUTILS}")
 message(STATUS "AV_BUILD_OSI: ${AV_BUILD_OSI}")
 message(STATUS "AV_BUILD_CLP: ${AV_BUILD_CLP}")
@@ -1176,6 +1179,7 @@ ExternalProject_Add(aliceVision
             -DALICEVISION_USE_APRILTAG=${AV_BUILD_APRILTAG}
             -DALICEVISION_USE_OPENCV=${AV_BUILD_OPENCV}
             -DALICEVISION_USE_OPENGV=${AV_BUILD_OPENGV}
+            -DALICEVISION_USE_GEOGRAPHIC=${AV_USE_GEOGRAPHIC}
             -DALICEVISION_USE_POPSIFT=${AV_BUILD_POPSIFT}
             -DALICEVISION_USE_CUDA=${AV_USE_CUDA}
             -DALICEVISION_BUILD_DOC=OFF

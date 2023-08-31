@@ -183,6 +183,10 @@ alicevision_add_software(aliceVision_sfmTransfer
 )
 
 # SfM transform
+SET(GeographicLib "")
+if(ALICEVISION_HAVE_GEOGRAPHIC)
+  SET(GeographicLib ${GeographicLib_LIBRARY})
+endif()
 alicevision_add_software(aliceVision_sfmTransform
   SOURCE main_sfmTransform.cpp
   FOLDER ${FOLDER_SOFTWARE_UTILS}
@@ -193,7 +197,7 @@ alicevision_add_software(aliceVision_sfmTransform
         aliceVision_sfmData
         aliceVision_sfmDataIO
         Boost::program_options
-	      ${GeographicLib_LIBRARY}
+	${GeographicLib}
 )
 
 # SfM Regression
