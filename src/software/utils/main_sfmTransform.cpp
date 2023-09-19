@@ -247,7 +247,7 @@ struct AlignRotateTranslateScaleError {
   double observed_z;
 };
 
-void alignGpsToUTM(const sfmData::SfMData& sfmData, double& S, Mat3& R, Vec3& t)
+void alignGpsToUTM(const sfmData::SfMData& sfmData, bool &fixAltitude, double& S, Mat3& R, Vec3& t)
 {
     bool debug = false;
 
@@ -279,7 +279,62 @@ void alignGpsToUTM(const sfmData::SfMData& sfmData, double& S, Mat3& R, Vec3& t)
             << "No pose for view " << v.second->getViewId() << std::endl);
         }
     }
+
+    // HISTOGRAM BASED PEAK SEARCH AND ASSIGNMENT
+    double peak = 0.0;
+    if(fixAltitude)
+    {
+        double minA = 1e6;
+        double maxA = -1e6;
+        for(auto it : coords)
+        {
+            minA = (it(2) < minA) ? it(2) : minA;
+            maxA = (it(2) > maxA) ? it(2) : maxA;
+        }
+        maxA += 0.01; minA -= 0.01; // just to allow for easier comparison
+        int numBins = 32;
+        double range = maxA - minA; 
+        double binWidth = range / (double)numBins;
+
+         std::cout << "Min Max found " << minA << " " << maxA << std::endl;
+
+        // bin heights
+        int* counts = new int[numBins];
+        memset(counts,0x00,numBins*sizeof(int));
+        for(auto it : coords)
+        {
+            double currAlt = it(2);
+            double uBinLim = minA + binWidth;
+            int bin = 0;
+            while(currAlt > uBinLim)
+            {
+                ++bin; 
+                uBinLim += binWidth;
+            }
+            counts[bin] +=1;
+        }
+
+        // tell 
+        int maxV = 0; int maxI = -1;
+        for(int i = 0; i < numBins; i++)
+        {
+            if(counts[i] > maxV)
+            {
+                maxV = counts[i]; 
+                maxI = i;
+            }
+        }
+
+        peak = (minA + (maxI+1)*binWidth - binWidth/2.0);
+        std::cout << "Altitude peak is at " << peak << std::endl;
+        delete[] counts;
+    }
+
     mean /= numValidPoses;
+    if(fixAltitude)
+        mean(2) = peak;
+
+
 
     {
         FILE* localcoordfile = fopen("localcenter.json", "wt");
@@ -343,6 +398,12 @@ void alignGpsToUTM(const sfmData::SfMData& sfmData, double& S, Mat3& R, Vec3& t)
         {
             double lat; double lon; double alt;
             v.second->getGpsPositionWGS84FromMetadata(lat, lon, alt);
+
+            if(fixAltitude)
+            {
+                alt = peak;
+            }
+
             // zone and northp should be returned!!!
             int zone; bool northp; 
             double x, y, gamma, k;
@@ -514,9 +575,10 @@ int aliceVision_main(int argc, char **argv)
 #endif
     )
     ("transformation", po::value<std::string>(&transform)->default_value(transform),
-      "required only for 'transformation' and 'single camera' methods:\n"
+      "required only for 'transformation', 'single camera' and 'gps2utm' methods:\n"
       "Transformation: Align [X,Y,Z] to +Y-axis, rotate around Y by R deg, scale by S; syntax: X,Y,Z;R;S\n"
-      "Single camera: camera UID or image filename")
+      "Single camera: camera UID or image filename\n"
+      "Gps2UTM: Fix altitude to single value; Syntax: true|false")
     ("manualTransform", po::value<std::string>(&manualTransform),
         "Translation, rotation and scale defined with the manual mode.")
     ("landmarksDescriberTypes,d", po::value<std::string>(&landmarksDescriberTypesName)->default_value(landmarksDescriberTypesName),
@@ -720,7 +782,12 @@ int aliceVision_main(int argc, char **argv)
 #if ALICEVISION_IS_DEFINED(ALICEVISION_HAVE_GEOGRAPHIC)
       case EAlignmentMethod::FROM_GPS2UTM:
       {
-          alignGpsToUTM(sfmData, S, R, t);
+          bool fixAltitude = false;
+          if(!transform.empty())
+          {
+            fixAltitude = transform.compare("true") == 0;
+          }
+          alignGpsToUTM(sfmData, fixAltitude, S, R, t);
           break;
       }
 #endif
