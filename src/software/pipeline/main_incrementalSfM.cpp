@@ -17,7 +17,7 @@
 #include <aliceVision/types.hpp>
 #include <aliceVision/config.hpp>
 #include <aliceVision/track/TracksBuilder.hpp>
-#include <aliceVision/sfm/BundleAdjustment.hpp>
+#include <aliceVision/sfm/bundle/BundleAdjustment.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
@@ -27,7 +27,7 @@
 // These constants define the current software version.
 // They must be updated when the command line is changed.
 #define ALICEVISION_SOFTWARE_VERSION_MAJOR 2
-#define ALICEVISION_SOFTWARE_VERSION_MINOR 3
+#define ALICEVISION_SOFTWARE_VERSION_MINOR 4
 
 using namespace aliceVision;
 
@@ -56,8 +56,8 @@ bool retrieveViewIdFromImageName(const sfmData::SfMData& sfmData,
     const sfmData::View& v = *(viewPair.second.get());
     
     if(name == std::to_string(v.getViewId()) ||
-       name == fs::path(v.getImagePath()).filename().string() ||
-       name == v.getImagePath())
+       name == fs::path(v.getImage().getImagePath()).filename().string() ||
+       name == v.getImage().getImagePath())
     {
       out_viewId = v.getViewId();
       break;
@@ -93,6 +93,7 @@ int aliceVision_main(int argc, char **argv)
   bool computeStructureColor = true;
 
   int randomSeed = std::mt19937::default_seed;
+  bool logIntermediateSteps = false;
 
   po::options_description requiredParams("Required parameters");
   requiredParams.add_options()
@@ -186,6 +187,8 @@ int aliceVision_main(int argc, char **argv)
       "Compute each 3D point color.\n")
     ("randomSeed", po::value<int>(&randomSeed)->default_value(randomSeed),
       "This seed value will generate a sequence using a linear random generator. Set -1 to use a random seed.")
+    ("logIntermediateSteps", po::value<bool>(&sfmParams.logIntermediateSteps)->default_value(logIntermediateSteps),
+      "If set to true, the current state of the scene will be dumped as an SfMData file every 3 resections.")
     ;
 
   CmdLine cmdline("Sequential/Incremental reconstruction.\n"

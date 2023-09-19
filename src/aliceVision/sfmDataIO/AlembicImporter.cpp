@@ -655,7 +655,7 @@ bool readCamera(const Version & abcVersion, const ICamera& camera, const M44d& m
     // set metadata
     for(std::size_t i = 0; i < rawMetadata.size(); i+=2)
     {
-      view->addMetadata(rawMetadata.at(i), rawMetadata.at(i + 1));
+      view->getImage().addMetadata(rawMetadata.at(i), rawMetadata.at(i + 1));
     }
 
     for (IndexT val : mvg_ancestorsParams)
@@ -693,7 +693,7 @@ bool readCamera(const Version & abcVersion, const ICamera& camera, const M44d& m
       T2 = (M * T * M).inverse();
     }
 
-    Pose3 pose(T2.block<3, 4>(0, 0));
+    Pose3 pose(T2);
 
     if(view->isPartOfRig() && !view->isPoseIndependant())
     {
@@ -825,7 +825,7 @@ bool readXform(const Version & abcVersion, IXform& xform, M44d& mat, sfmData::Sf
           T2 = (M * T * M).inverse();
       }
 
-      Pose3 pose(T2.block<3, 4>(0, 0));
+      Pose3 pose(T2);
 
       if (sfmData.getPoses().find(poseId) == sfmData.getPoses().end())
       {

@@ -255,7 +255,7 @@ int aliceVision_main(int argc, char** argv)
                 // Sort views per timestamps
                 for(auto v : outSfmData.getViews())
                 {
-                    int64_t t = v.second->getMetadataDateTimestamp();
+                    int64_t t = v.second->getImage().getMetadataDateTimestamp();
                     sorted_views.push_back(std::make_pair(t, v.second->getPoseId()));
                 }
                 std::sort(sorted_views.begin(), sorted_views.end());
@@ -280,7 +280,7 @@ int aliceVision_main(int argc, char** argv)
 
             Eigen::Matrix3d c_R_oprior = p.rotation() * ocur_R_oprior;
 
-            p.rotation() = c_R_oprior;
+            p.setRotation(c_R_oprior);
             pose.second.setTransform(p);
         }
     }
@@ -299,7 +299,7 @@ int aliceVision_main(int argc, char** argv)
         Eigen::Matrix3d matLatitude =
             Eigen::AngleAxisd(degreeToRadian(offsetLatitude), Vec3(1, 0, 0)).toRotationMatrix();
         Eigen::Matrix3d newR = p.rotation() * matLongitude * matLatitude;
-        p.rotation() = newR;
+        p.setRotation(newR);
         pose.second.setTransform(p);
     }
 

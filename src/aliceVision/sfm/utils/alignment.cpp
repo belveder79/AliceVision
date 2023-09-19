@@ -6,7 +6,7 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include <aliceVision/sfm/utils/alignment.hpp>
-#include <aliceVision/sfm/liealgebra.hpp>
+#include <aliceVision/geometry/lie.hpp>
 #include <aliceVision/geometry/rigidTransformation3D.hpp>
 #include <aliceVision/stl/regex.hpp>
 
@@ -209,7 +209,7 @@ std::map<std::string, IndexT> retrieveMatchingFilepath(
     std::map<std::string, IndexT> uniqueFileparts;
     for (auto& viewIt : sfmData.getViews())
     {
-        const std::string& imagePath = viewIt.second->getImagePath();
+        const std::string& imagePath = viewIt.second->getImage().getImagePath();
         std::string cumulatedValues;
         if (filePatternMatching.empty())
         {
@@ -305,7 +305,7 @@ std::map<std::string, IndexT> retrieveUniqueMetadataValues(
     std::map<std::string, IndexT> uniqueMetadataValues;
     for (auto& viewIt : sfmData.getViews())
     {
-        const std::map<std::string, std::string>& m = viewIt.second->getMetadata();
+        const std::map<std::string, std::string>& m = viewIt.second->getImage().getMetadata();
         std::string cumulatedValues;
         for (const std::string& k : metadataList)
         {
@@ -313,7 +313,7 @@ std::map<std::string, IndexT> retrieveUniqueMetadataValues(
             if (mIt != m.end())
                 cumulatedValues += mIt->second;
         }
-        ALICEVISION_LOG_TRACE("retrieveUniqueMetadataValues: " << viewIt.second->getImagePath() << " -> " << cumulatedValues);
+        ALICEVISION_LOG_TRACE("retrieveUniqueMetadataValues: " << viewIt.second->getImage().getImagePath() << " -> " << cumulatedValues);
         auto it = uniqueMetadataValues.find(cumulatedValues);
         if (it != uniqueMetadataValues.end())
         {
@@ -530,7 +530,7 @@ void computeNewCoordinateSystemFromCamerasXAxis(const sfmData::SfMData& sfmData,
 
         if(sfmData.isPoseAndIntrinsicDefined(&view))
         {
-            const sfmData::EEXIFOrientation orientation = view.getMetadataOrientation();
+            const sfmData::EEXIFOrientation orientation = view.getImage().getMetadataOrientation();
             const sfmData::CameraPose camPose = sfmData.getPose(view);
             const geometry::Pose3& p = camPose.getTransform();
 
@@ -544,9 +544,10 @@ void computeNewCoordinateSystemFromCamerasXAxis(const sfmData::SfMData& sfmData,
             //If we use the raw X, it will be in the image without the orientation 
             //We need to use this orientation to make sure the X spans the horizontal plane.
             const Eigen::Vector3d rX = p.rotation().transpose() * oriented_X;
+            const Eigen::Vector3d rY = p.rotation().transpose() * oriented_Y;
 
             meanRx += rX;
-            meanRy += oriented_Y;
+            meanRy += rY;
 
             meanCameraCenter += p.center();
             ++validPoses;
@@ -570,7 +571,7 @@ void computeNewCoordinateSystemFromCamerasXAxis(const sfmData::SfMData& sfmData,
 
         if(sfmData.isPoseAndIntrinsicDefined(&view))
         {
-            const sfmData::EEXIFOrientation orientation = view.getMetadataOrientation();
+            const sfmData::EEXIFOrientation orientation = view.getImage().getMetadataOrientation();
             const sfmData::CameraPose camPose = sfmData.getPose(view);
             const geometry::Pose3& p = camPose.getTransform();
 
@@ -608,18 +609,18 @@ void computeNewCoordinateSystemFromCamerasXAxis(const sfmData::SfMData& sfmData,
     Eigen::Vector3d nullestSpace = solver.eigenvectors().col(minCol).real();
     const Eigen::Vector3d referenceAxis = Eigen::Vector3d::UnitY();    
 
-    const double d = nullestSpace.dot(meanRy);
+    // Compute the rotation which rotates nullestSpace onto unitY
+    out_R = Matrix3d(Quaterniond().setFromTwoVectors(nullestSpace, referenceAxis));
+    const double d = (out_R * meanRy).normalized().dot(Eigen::Vector3d::UnitY());
     const bool inverseDirection = (d < 0.0);
     // We have an ambiguity on the Y direction, so if our Y axis is not aligned with the Y axis of the scene
     // we inverse the axis.
     if(inverseDirection)
     {
         nullestSpace = -nullestSpace;
+        out_R = Matrix3d(Quaterniond().setFromTwoVectors(nullestSpace, referenceAxis));
     }
-
-
-    // Compute the rotation which rotates nullestSpace onto unitY
-    out_R = Matrix3d(Quaterniond().setFromTwoVectors(nullestSpace, referenceAxis));
+    
     out_S = 1.0;
     out_t = -out_R * meanCameraCenter;
 }
@@ -724,7 +725,7 @@ IndexT getViewIdFromExpression(const sfmData::SfMData& sfmData, const std::strin
     {
         for(const auto & view : sfmData.getViews())
         {
-            const std::string path = view.second->getImagePath();
+            const std::string path = view.second->getImage().getImagePath();
             if(std::regex_match(path, cameraRegex))
             {
                 viewId = view.second->getViewId();
@@ -776,7 +777,7 @@ IndexT getCenterCameraView(const sfmData::SfMData& sfmData)
 
 void computeNewCoordinateSystemFromSingleCamera(const sfmData::SfMData& sfmData, const IndexT viewId, double& out_S, Mat3& out_R, Vec3& out_t)
 {
-    sfmData::EEXIFOrientation orientation = sfmData.getView(viewId).getMetadataOrientation();
+    sfmData::EEXIFOrientation orientation = sfmData.getView(viewId).getImage().getMetadataOrientation();
     ALICEVISION_LOG_TRACE("computeNewCoordinateSystemFromSingleCamera orientation: " << int(orientation));
 
     Mat3 R_image = Eigen::AngleAxisd(degreeToRadian(orientationToRotationDegree(orientation)), Vec3(0, 0, 1)).toRotationMatrix();
@@ -922,13 +923,13 @@ bool computeNewCoordinateSystemFromGpsData(const sfmData::SfMData& sfmData, std:
         const auto viewID = v.first;
         const auto& view = v.second;
         // skip no pose
-        if(!(sfmData.isPoseAndIntrinsicDefined(viewID) && view->hasGpsMetadata()))
+        if(!(sfmData.isPoseAndIntrinsicDefined(viewID) && view->getImage().hasGpsMetadata()))
         {
-            ALICEVISION_LOG_TRACE("Skipping view " << viewID << " because pose " << sfmData.isPoseAndIntrinsicDefined(viewID) << " and gps " << view->hasGpsMetadata());
+            ALICEVISION_LOG_TRACE("Skipping view " << viewID << " because pose " << sfmData.isPoseAndIntrinsicDefined(viewID) << " and gps " << view->getImage().hasGpsMetadata());
             continue;
         }
         // extract the gps position
-        gpsPositions.push_back(view->getGpsPositionFromMetadata());
+        gpsPositions.push_back(view->getImage().getGpsPositionFromMetadata());
         // get the center
         centers.push_back(sfmData.getPose(*view.get()).getTransform().center());
     }
@@ -1127,7 +1128,7 @@ void computeNewCoordinateSystemAuto(const sfmData::SfMData& sfmData, double& out
             continue;
         }
 
-        if (!v.second->hasGpsMetadata())
+        if (!v.second->getImage().hasGpsMetadata())
         {
             continue;
         }
@@ -1136,7 +1137,7 @@ void computeNewCoordinateSystemAuto(const sfmData::SfMData& sfmData, double& out
         const auto & pose = poses.at(poseId);
 
         const Vec3 camCoordinates = pose.getTransform().center();
-        const Vec3 gpsCoordinates = v.second->getGpsPositionFromMetadata();
+        const Vec3 gpsCoordinates = v.second->getImage().getGpsPositionFromMetadata();
 
         list_pairs.push_back(std::make_pair(camCoordinates, gpsCoordinates));
     }
