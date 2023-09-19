@@ -263,15 +263,18 @@ void alignGpsToUTM(const sfmData::SfMData& sfmData, bool &fixAltitude, double& S
         if(poses.find(poseId) != poses.end())
         {
             double lat; double lon; double alt;
-            v.second->getGpsPositionWGS84FromMetadata(lat, lon, alt);
-            // zone and northp should be returned!!!
-            double x, y, gamma, k;
-            GeographicLib::UTMUPS::Forward(lat, lon, zone, northp, x, y, gamma, k);
-            mean += Eigen::Vector3d(x, y, alt);
+            if(v.second->getImage().hasGpsMetadata())
+            {
+                v.second->getImage().getGpsPositionWGS84FromMetadata(lat, lon, alt);
+                // zone and northp should be returned!!!
+                double x, y, gamma, k;
+                GeographicLib::UTMUPS::Forward(lat, lon, zone, northp, x, y, gamma, k);
+                mean += Eigen::Vector3d(x, y, alt);
 
-            coords.push_back(Eigen::Vector3d(x, y, alt));
+                coords.push_back(Eigen::Vector3d(x, y, alt));
 
-            numValidPoses++;
+                numValidPoses++;
+            }
         }
         else
         {
@@ -397,55 +400,58 @@ void alignGpsToUTM(const sfmData::SfMData& sfmData, bool &fixAltitude, double& S
         if(poses.find(poseId) != poses.end())
         {
             double lat; double lon; double alt;
-            v.second->getGpsPositionWGS84FromMetadata(lat, lon, alt);
-
-            if(fixAltitude)
+            if(v.second->getImage().hasGpsMetadata())
             {
-                alt = peak;
+                v.second->getImage().getGpsPositionWGS84FromMetadata(lat, lon, alt);
+
+                if(fixAltitude)
+                {
+                    alt = peak;
+                }
+
+                // zone and northp should be returned!!!
+                int zone; bool northp; 
+                double x, y, gamma, k;
+                GeographicLib::UTMUPS::Forward(lat, lon, zone, northp, x, y, gamma, k);
+
+                /*
+                {
+                    ALICEVISION_LOG_INFO(std::setprecision(17)
+                    << "Getting center for view " << v.second->getViewId() << std::endl);
+                }
+                */
+                const Vec3 center = sfmData.getPose(*v.second).getTransform().center();
+                /*
+                {
+                    ALICEVISION_LOG_INFO(std::setprecision(17)
+                    << "\t " << center << std::endl);
+                }
+                */
+                cPtr[0] = center(0);
+                cPtr[1] = center(1);
+                cPtr[2] = center(2);
+
+                ceres::CostFunction* cost_function =
+                    new ceres::AutoDiffCostFunction<AlignRotateTranslateScaleError, 3, 3, 3, 1, 3>(
+                    new AlignRotateTranslateScaleError(
+                        x - mean(0),
+                        y - mean(1),
+                        alt - mean(2)
+                    )
+                );
+
+                problem.AddResidualBlock(
+                        cost_function,
+                        loss_function, // huber for now
+                        rotPtr,
+                        tranPtr,
+                        sclPtr,
+                        cPtr
+                );
+
+                problem.SetParameterBlockConstant(cPtr);
+                cPtr += 3;
             }
-
-            // zone and northp should be returned!!!
-            int zone; bool northp; 
-            double x, y, gamma, k;
-            GeographicLib::UTMUPS::Forward(lat, lon, zone, northp, x, y, gamma, k);
-
-            /*
-            {
-                ALICEVISION_LOG_INFO(std::setprecision(17)
-                << "Getting center for view " << v.second->getViewId() << std::endl);
-            }
-            */
-            const Vec3 center = sfmData.getPose(*v.second).getTransform().center();
-            /*
-            {
-                ALICEVISION_LOG_INFO(std::setprecision(17)
-                << "\t " << center << std::endl);
-            }
-            */
-            cPtr[0] = center(0);
-            cPtr[1] = center(1);
-            cPtr[2] = center(2);
-
-            ceres::CostFunction* cost_function =
-                new ceres::AutoDiffCostFunction<AlignRotateTranslateScaleError, 3, 3, 3, 1, 3>(
-                new AlignRotateTranslateScaleError(
-                    x - mean(0),
-                    y - mean(1),
-                    alt - mean(2)
-                )
-            );
-
-            problem.AddResidualBlock(
-                    cost_function,
-                    loss_function, // huber for now
-                    rotPtr,
-                    tranPtr,
-                    sclPtr,
-                    cPtr
-            );
-
-            problem.SetParameterBlockConstant(cPtr);
-            cPtr += 3;
         }
     }
     //problem.SetParameterBlockConstant(sclPtr);
